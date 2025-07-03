@@ -1,22 +1,39 @@
 'use client'
-import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import Head from 'next/head'
 
 export default function TruthDareWheel() {
+  // Game states
+  const [showIntro, setShowIntro] = useState(true)
   const [result, setResult] = useState<'truth' | 'dare' | null>(null)
   const [question, setQuestion] = useState('')
   const [isSpinning, setIsSpinning] = useState(false)
   const [rotation, setRotation] = useState(0)
   const [currentPlayer, setCurrentPlayer] = useState<'Alex' | 'Taylor'>('Alex')
+  const [scores, setScores] = useState({ Alex: 0, Taylor: 0 })
+  const [showAd, setShowAd] = useState(false)
+  const [answered, setAnswered] = useState(false)
 
+  // Game rules
+  const gameRules = [
+    "1. Players take turns spinning the wheel",
+    "2. Answer truthfully or complete the dare",
+    "3. Get +1 point for answering, 0 for skipping",
+    "4. First to 10 points wins!",
+    "5. Have fun and be respectful!"
+  ]
+
+  // Spin wheel function
   const spinWheel = async () => {
     if (isSpinning) return
     setIsSpinning(true)
     setQuestion('')
+    setAnswered(false)
     
-    // Exactly 5 full rotations plus either 90° (truth) or 270° (dare)
+    // 5 full rotations plus either 90° (truth) or 270° (dare)
     const spins = 5
-    const outcome = Math.random() < 0.5 ? 90 : 270 // 50/50 chance
+    const outcome = Math.random() < 0.5 ? 90 : 270
     const newRotation = rotation + 360 * spins + outcome
     setRotation(newRotation)
 
@@ -25,23 +42,95 @@ export default function TruthDareWheel() {
       const result = newRotation % 360 < 180 ? 'truth' : 'dare'
       setResult(result)
       
-      // Switch player turn
-      setCurrentPlayer(currentPlayer === 'Alex' ? 'Taylor' : 'Alex')
-      
       try {
         const res = await fetch(`/api/${result}`)
         const data = await res.json()
         const randomItem = data[Math.floor(Math.random() * data.length)]
         setQuestion(result === 'truth' ? randomItem.question : randomItem.challenge)
+        
+        // Show ad after 30% of spins
+        if (Math.random() < 0.3) {
+          setTimeout(() => setShowAd(true), 2000)
+        }
       } catch (error) {
         setQuestion("Failed to load question. Try again!")
       }
     }, 3000)
   }
 
+  // Handle answer
+  const handleAnswer = (action: 'answered' | 'skipped') => {
+    if (answered) return
+    
+    setAnswered(true)
+    if (action === 'answered') {
+      setScores(prev => ({
+        ...prev,
+        [currentPlayer]: prev[currentPlayer] + 1
+      }))
+    }
+    
+    // Switch player after delay
+    setTimeout(() => {
+      setCurrentPlayer(currentPlayer === 'Alex' ? 'Taylor' : 'Alex')
+      setResult(null)
+    }, 1500)
+  }
+
+  // Close ad
+  const closeAd = () => {
+    setShowAd(false)
+  }
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-rose-900 to-pink-800 p-4">
-      {/* Players Header */}
+      {/* SEO Metadata */}
+      <Head>
+        <title>Truth or Dare Spin Wheel Game</title>
+        <meta name="description" content="Play fun truth or dare with friends! Spin the wheel and get exciting challenges." />
+        <meta name="keywords" content="truth or dare, party game, spin the wheel, friends game" />
+      </Head>
+
+      {/* Introduction Screen */}
+      <AnimatePresence>
+        {showIntro && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-50 p-4"
+          >
+            <motion.div 
+              initial={{ y: 20, scale: 0.95 }}
+              animate={{ y: 0, scale: 1 }}
+              className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md w-full border border-white/20 shadow-xl"
+            >
+              <h1 className="text-4xl font-bold text-center text-rose-200 mb-6">Truth or Dare</h1>
+              
+              <div className="space-y-4 mb-8">
+                <h2 className="text-xl font-semibold text-white mb-2">Game Rules:</h2>
+                <ul className="space-y-2 text-white/90">
+                  {gameRules.map((rule, i) => (
+                    <li key={i} className="flex items-start">
+                      <span className="mr-2">•</span>
+                      {rule}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <button
+                onClick={() => setShowIntro(false)}
+                className="w-full py-3 bg-gradient-to-r from-rose-500 to-pink-600 rounded-full text-white font-medium hover:scale-105 transition-transform"
+              >
+                Continue to Game
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Players Header with Scores */}
       <div className="flex items-center justify-center space-x-12 mb-8 w-full max-w-md">
         {/* Player 1 */}
         <div className={`flex flex-col items-center transition-all ${currentPlayer === 'Alex' ? 'scale-110' : 'scale-90 opacity-80'}`}>
@@ -53,9 +142,7 @@ export default function TruthDareWheel() {
             </div>
           </div>
           <span className={`font-medium ${currentPlayer === 'Alex' ? 'text-white text-lg' : 'text-gray-300'}`}>Alex</span>
-          {currentPlayer === 'Alex' && (
-            <div className="w-4 h-4 bg-rose-400 rounded-full mt-1 animate-pulse"></div>
-          )}
+          <span className="text-rose-300 font-bold mt-1">{scores.Alex}</span>
         </div>
         
         <h1 className="text-4xl font-bold text-white text-center">Truth or Dare</h1>
@@ -70,9 +157,7 @@ export default function TruthDareWheel() {
             </div>
           </div>
           <span className={`font-medium ${currentPlayer === 'Taylor' ? 'text-white text-lg' : 'text-gray-300'}`}>Taylor</span>
-          {currentPlayer === 'Taylor' && (
-            <div className="w-4 h-4 bg-rose-400 rounded-full mt-1 animate-pulse"></div>
-          )}
+          <span className="text-rose-300 font-bold mt-1">{scores.Taylor}</span>
         </div>
       </div>
       
@@ -94,24 +179,24 @@ export default function TruthDareWheel() {
             background: 'conic-gradient(#FF8E8E 0deg 180deg, #FFB6C1 180deg 360deg)'
           }}
         >
-          {/* Truth Section - Larger text and better positioning */}
+          {/* Truth Section */}
           <div className="absolute inset-0 flex items-center justify-start pl-8" 
             style={{ clipPath: 'polygon(0 0, 50% 50%, 0 100%)', left: '10%' }}>
             <span className="text-white font-bold text-3xl rotate-[30deg] block">TRUTH</span>
           </div>
           
-          {/* Dare Section - Larger text and better positioning */}
+          {/* Dare Section */}
           <div className="absolute inset-0 flex items-center justify-end pr-8"
             style={{ clipPath: 'polygon(100% 0, 50% 50%, 100% 100%)', right: '10%' }}>
             <span className="text-white font-bold text-3xl rotate-[-30deg] block">DARE</span>
           </div>
 
-          {/* Center divider line */}
+          {/* Center divider lines */}
           <div className="absolute top-0 left-1/2 w-1 h-full bg-white/30 transform -translate-x-1/2"></div>
           <div className="absolute top-1/2 left-0 w-full h-1 bg-white/30 transform -translate-y-1/2"></div>
         </motion.div>
         
-        {/* Center decoration - Now clickable */}
+        {/* Center decoration - Clickable */}
         <div 
           className="absolute top-1/2 left-1/2 w-16 h-16 transform -translate-x-1/2 -translate-y-1/2 z-10 cursor-pointer"
           onClick={spinWheel}
@@ -122,35 +207,92 @@ export default function TruthDareWheel() {
         </div>
       </div>
       
-      {/* Result Display */}
+      {/* Result Display with Answer Controls */}
       {result && (
-        <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 max-w-md w-full text-center border border-white/20 shadow-lg">
+        <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 max-w-md w-full text-center border border-white/20 shadow-lg mb-8">
           <div className="mb-4">
             <span className="text-white font-medium">{currentPlayer}'s turn:</span>
           </div>
           <h2 className="text-2xl font-bold mb-2 uppercase text-rose-200">{result}</h2>
           <p className="text-lg mb-6 text-white italic">{question || 'Loading...'}</p>
-          <button 
-            onClick={spinWheel}
-            disabled={isSpinning}
-            className="px-8 py-3 bg-gradient-to-r from-rose-500 to-pink-600 rounded-full text-white font-medium disabled:opacity-50 transition-all hover:scale-105 shadow-lg flex items-center justify-center mx-auto"
-          >
-            {isSpinning ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Spinning...
-              </>
-            ) : 'Spin Again'}
-          </button>
+          
+          {!answered ? (
+            <div className="flex justify-center space-x-4">
+              <button 
+                onClick={() => handleAnswer('answered')}
+                className="px-6 py-2 bg-green-500 rounded-full text-white font-medium hover:scale-105 transition-transform"
+              >
+                Answered (+1)
+              </button>
+              <button 
+                onClick={() => handleAnswer('skipped')}
+                className="px-6 py-2 bg-rose-500 rounded-full text-white font-medium hover:scale-105 transition-transform"
+              >
+                Skipped (0)
+              </button>
+            </div>
+          ) : (
+            <p className="text-green-300 font-medium">Score updated!</p>
+          )}
         </div>
       )}
-      
+
+      {/* Spin Button when no result showing */}
+      {!result && !showIntro && (
+        <button 
+          onClick={spinWheel}
+          disabled={isSpinning}
+          className="px-8 py-3 bg-gradient-to-r from-rose-500 to-pink-600 rounded-full text-white font-medium disabled:opacity-50 transition-all hover:scale-105 shadow-lg mb-8"
+        >
+          {isSpinning ? 'Spinning...' : 'Spin the Wheel'}
+        </button>
+      )}
+
+      {/* Ad Popup */}
+      <AnimatePresence>
+        {showAd && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4"
+          >
+            <motion.div 
+              className="bg-white rounded-xl p-6 max-w-md w-full relative"
+              initial={{ y: 20 }}
+              animate={{ y: 0 }}
+            >
+              <button 
+                onClick={closeAd}
+                className="absolute top-2 right-2 p-1 rounded-full hover:bg-gray-100"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <h3 className="text-xl font-bold text-center mb-4">Sponsored Content</h3>
+              <div className="bg-gray-200 rounded-lg h-48 flex items-center justify-center mb-4">
+                <span className="text-gray-500">Advertisement Space</span>
+              </div>
+              <p className="text-center text-gray-600 mb-4">
+                Support our game by checking out our sponsors!
+              </p>
+              <button 
+                onClick={closeAd}
+                className="w-full py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600"
+              >
+                Continue Playing
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Footer */}
-      <div className="mt-8 text-center text-white/60 text-sm">
+      <div className="mt-auto pt-8 text-center text-white/60 text-sm">
         <p>{currentPlayer}'s turn to play</p>
+        <p className="mt-2">First to 10 points wins!</p>
       </div>
     </div>
   )
